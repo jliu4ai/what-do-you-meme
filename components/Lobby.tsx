@@ -4,19 +4,28 @@ import { User, Room } from '../types';
 import { roomService } from '../services/mockBackend';
 import Button from './Button';
 import Spinner from './Spinner';
-import { Copy, Crown } from 'lucide-react';
+import { Copy, Crown, Share2, CheckCircle2 } from 'lucide-react';
 
 interface Props {
   user: User;
   onGameStart: (room: Room) => void;
   onBack: () => void;
+  initialRoomCode?: string | null;
 }
 
-const Lobby: React.FC<Props> = ({ user, onGameStart, onBack }) => {
+const Lobby: React.FC<Props> = ({ user, onGameStart, onBack, initialRoomCode }) => {
   const [room, setRoom] = useState<Room | null>(null);
-  const [joinCode, setJoinCode] = useState('');
+  const [joinCode, setJoinCode] = useState(initialRoomCode || '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Auto-join if code provided via props
+  useEffect(() => {
+    if (initialRoomCode && !room) {
+        joinRoom(initialRoomCode);
+    }
+  }, [initialRoomCode]);
 
   // Polling for room updates
   useEffect(() => {
@@ -47,12 +56,12 @@ const Lobby: React.FC<Props> = ({ user, onGameStart, onBack }) => {
     }
   };
 
-  const joinRoom = async () => {
-    if (!joinCode) return;
+  const joinRoom = async (codeToJoin: string = joinCode) => {
+    if (!codeToJoin) return;
     setLoading(true);
     setError('');
     try {
-        const existingRoom = await roomService.joinRoom(joinCode.toUpperCase());
+        const existingRoom = await roomService.joinRoom(codeToJoin.toUpperCase());
         if (existingRoom) {
             setRoom(existingRoom);
         } else {
@@ -71,19 +80,37 @@ const Lobby: React.FC<Props> = ({ user, onGameStart, onBack }) => {
       }
   };
 
+  const copyInviteLink = () => {
+      if (!room) return;
+      const url = `${window.location.origin}?room=${room.code}`;
+      navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+  };
+
   if (room) {
       // Waiting Room View
       return (
         <div className="max-w-2xl mx-auto w-full py-12 px-4">
              <div className="bg-gray-900 border border-gray-800 rounded-3xl p-8 text-center">
-                <div className="mb-8">
+                <div className="mb-8 relative">
                     <p className="text-gray-500 uppercase text-sm font-bold tracking-widest mb-2">Room Code</p>
-                    <div className="text-5xl font-mono font-black text-purple-400 tracking-widest flex items-center justify-center gap-4">
+                    <div className="text-5xl font-mono font-black text-purple-400 tracking-widest flex items-center justify-center gap-4 mb-4">
                         {room.code}
-                        <button onClick={() => navigator.clipboard.writeText(room.code)} className="text-gray-600 hover:text-white text-xl">
-                            <Copy />
-                        </button>
                     </div>
+                    
+                    <Button 
+                        variant="secondary" 
+                        size="sm" 
+                        onClick={copyInviteLink}
+                        className="mx-auto bg-gray-800 hover:bg-gray-700"
+                    >
+                        {copied ? (
+                            <>Copied! <CheckCircle2 className="w-4 h-4 text-green-400" /></>
+                        ) : (
+                            <>Invite Friends <Share2 className="w-4 h-4" /></>
+                        )}
+                    </Button>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-12">
@@ -156,7 +183,7 @@ const Lobby: React.FC<Props> = ({ user, onGameStart, onBack }) => {
                         className="bg-black border border-gray-700 text-white font-mono text-center text-xl rounded-xl flex-1 p-3 focus:border-purple-500 focus:outline-none"
                         maxLength={6}
                     />
-                    <Button onClick={joinRoom} disabled={joinCode.length < 3} isLoading={loading}>Join</Button>
+                    <Button onClick={() => joinRoom()} disabled={joinCode.length < 3} isLoading={loading}>Join</Button>
                 </div>
                 {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
             </div>

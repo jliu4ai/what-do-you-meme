@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
 import { authService } from '../services/mockBackend';
 import Button from './Button';
@@ -13,13 +13,49 @@ interface Props {
 
 const AuthModal: React.FC<Props> = ({ isOpen, onClose, onLogin }) => {
   const [loading, setLoading] = useState(false);
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState('');
 
-  if (!isOpen) return null;
+  const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
-  const handleGoogleLogin = async () => {
+  // Handle Google Sign In
+  useEffect(() => {
+    if (isOpen && window.google && CLIENT_ID) {
+        try {
+            window.google.accounts.id.initialize({
+                client_id: CLIENT_ID,
+                callback: handleCredentialResponse
+            });
+            
+            if (googleButtonRef.current) {
+                window.google.accounts.id.renderButton(
+                    googleButtonRef.current,
+                    { theme: 'outline', size: 'large', width: '100%' }
+                );
+            }
+        } catch (e) {
+            console.error("Google Sign In Error", e);
+        }
+    }
+  }, [isOpen, CLIENT_ID]);
+
+  const handleCredentialResponse = async (response: any) => {
+      setLoading(true);
+      try {
+          const user = await authService.loginWithGoogle(response.credential);
+          onLogin(user);
+          onClose();
+      } catch (e) {
+          setError("Google Login Failed. Try Mock Login.");
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const handleMockLogin = async () => {
     setLoading(true);
     try {
-      const user = await authService.login();
+      const user = await authService.loginMock();
       onLogin(user);
       onClose();
     } catch (e) {
@@ -28,6 +64,8 @@ const AuthModal: React.FC<Props> = ({ isOpen, onClose, onLogin }) => {
       setLoading(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
@@ -43,21 +81,29 @@ const AuthModal: React.FC<Props> = ({ isOpen, onClose, onLogin }) => {
             <p className="text-gray-400 mt-2">Sign in to save your stats and packs.</p>
         </div>
 
-        <Button 
-            onClick={handleGoogleLogin} 
-            isLoading={loading}
-            className="w-full bg-white text-gray-900 hover:bg-gray-100 flex items-center justify-center gap-3 py-4"
-        >
-            {!loading && (
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                    <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                    <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.84z" />
-                    <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                </svg>
-            )}
-            Continue with Google
-        </Button>
+        <div className="space-y-4">
+            {/* Real Google Button Container */}
+            <div ref={googleButtonRef} className="w-full h-[40px] flex justify-center">
+                {!CLIENT_ID && <span className="text-xs text-red-400">Google Client ID missing in env</span>}
+            </div>
+
+            <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-gray-700"></div>
+                <span className="flex-shrink-0 mx-4 text-gray-500 text-xs">OR TEST WITH</span>
+                <div className="flex-grow border-t border-gray-700"></div>
+            </div>
+
+            <Button 
+                onClick={handleMockLogin} 
+                isLoading={loading}
+                variant="secondary"
+                className="w-full"
+            >
+                Guest / Demo Account
+            </Button>
+        </div>
+
+        {error && <p className="text-red-400 text-sm text-center mt-4">{error}</p>}
 
         <p className="mt-6 text-xs text-center text-gray-500">
             By continuing, you agree to our Terms of Service and Privacy Policy.

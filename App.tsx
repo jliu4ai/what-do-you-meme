@@ -38,6 +38,9 @@ const App: React.FC = () => {
   const [isGeneratingHand, setIsGeneratingHand] = useState(false);
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [showCopied, setShowCopied] = useState(false);
+  
+  // Holds the invite code from URL if any
+  const [pendingRoomCode, setPendingRoomCode] = useState<string | null>(null);
 
   // --- Initialization ---
   useEffect(() => {
@@ -45,8 +48,24 @@ const App: React.FC = () => {
     const user = authService.getCurrentUser();
     if (user) setCurrentUser(user);
 
-    // 2. Check URL Challenge
+    // 2. Check URL Params
     const params = new URLSearchParams(window.location.search);
+    
+    // Check for Invite Room Code
+    const roomCode = params.get('room');
+    if (roomCode) {
+        setPendingRoomCode(roomCode);
+        // If user is logged in, go straight to lobby
+        if (user) {
+            setView('LOBBY');
+        } else {
+            // If not logged in, we will show auth modal on click or let them login first
+            // For better UX, let's prompt login
+            setShowAuth(true);
+        }
+    }
+
+    // Check for Challenge Image (Solo mode)
     const imgId = params.get('img');
     if (imgId) {
       const targetImage = MEME_IMAGES.find(img => img.id === imgId);
@@ -57,6 +76,13 @@ const App: React.FC = () => {
       }
     }
   }, []);
+
+  // Watch for login to redirect to pending room
+  useEffect(() => {
+      if (currentUser && pendingRoomCode && view === 'HOME') {
+          setView('LOBBY');
+      }
+  }, [currentUser, pendingRoomCode, view]);
 
   // --- Actions ---
 
@@ -211,7 +237,9 @@ const App: React.FC = () => {
                     <Users className="w-8 h-8 text-pink-400" />
                 </div>
                 <h3 className="text-xl font-bold mb-2">Multiplayer</h3>
-                <p className="text-sm text-gray-500">Create a room and battle friends.</p>
+                <p className="text-sm text-gray-500">
+                    {pendingRoomCode ? 'Join Invited Game' : 'Create or Join Room'}
+                </p>
             </div>
         </div>
     </div>
@@ -343,7 +371,12 @@ const App: React.FC = () => {
         {view === 'HOME' && renderHome()}
         {view === 'GAME_SOLO' && renderGameArea()}
         {view === 'LOBBY' && currentUser && (
-            <Lobby user={currentUser} onGameStart={handleMultiplayerStart} onBack={() => setView('HOME')} />
+            <Lobby 
+                user={currentUser} 
+                onGameStart={handleMultiplayerStart} 
+                onBack={() => setView('HOME')} 
+                initialRoomCode={pendingRoomCode}
+            />
         )}
         {view === 'GAME_MULTI' && multiplayerRoom && (
             <div className="flex items-center justify-center h-[80vh] flex-col text-center p-8">
@@ -370,7 +403,7 @@ const App: React.FC = () => {
       )}
 
       <footer className="py-8 text-center text-gray-600 text-xs border-t border-gray-800/50 mt-auto">
-        <p>Powered by Google Gemini 2.5 Flash. Mock Payments & Auth enabled.</p>
+        <p>Powered by Google Gemini 2.5 Flash.</p>
       </footer>
     </div>
   );

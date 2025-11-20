@@ -25,20 +25,50 @@ try {
   console.error("Failed to restore user session", e);
 }
 
+// Helper to decode Google JWT (Client-side only for demo)
+const parseJwt = (token: string) => {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+};
+
 // --- AUTH SERVICE ---
 export const authService = {
-  login: async (): Promise<User> => {
+  // Called when "Continue with Google" provides a credential
+  loginWithGoogle: async (credential: string): Promise<User> => {
+    const payload = parseJwt(credential);
+    
+    if (payload) {
+        // Create or Update User based on Google Data
+        CURRENT_USER = {
+            id: payload.sub || `google_${Date.now()}`,
+            name: payload.name || 'Anonymous',
+            email: payload.email || '',
+            avatar: payload.picture || INITIAL_USER.avatar,
+            coins: CURRENT_USER?.coins || 100, // Preserve coins if re-login
+            unlockedThemes: CURRENT_USER?.unlockedThemes || ['starter']
+        };
+        localStorage.setItem('meme_user', JSON.stringify(CURRENT_USER));
+        return CURRENT_USER;
+    }
+    throw new Error("Invalid Google Token");
+  },
+
+  // Fallback Mock Login
+  loginMock: async (): Promise<User> => {
     await new Promise(r => setTimeout(r, 800)); // Simulate network
     
-    // Check localStorage for persistence (or re-save if missing)
     if (!CURRENT_USER) {
-       const saved = localStorage.getItem('meme_user');
-       if (saved) {
-         CURRENT_USER = JSON.parse(saved);
-       } else {
-         CURRENT_USER = { ...INITIAL_USER };
-         localStorage.setItem('meme_user', JSON.stringify(CURRENT_USER));
-       }
+       // Check localStorage logic handled in init, but if still null:
+       CURRENT_USER = { ...INITIAL_USER };
+       localStorage.setItem('meme_user', JSON.stringify(CURRENT_USER));
     }
     return CURRENT_USER!;
   },
@@ -46,6 +76,7 @@ export const authService = {
   logout: async () => {
     CURRENT_USER = null;
     localStorage.removeItem('meme_user');
+    // Optional: Revoke google token if needed
   },
 
   getCurrentUser: () => CURRENT_USER
