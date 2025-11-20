@@ -1,0 +1,5 @@
+{
+  "name": "What Do You Meme? AI Battle",
+  "description": "A party game where you battle an AI to create the funniest caption for random meme images. Powered by Gemini 2.5 Flash.",
+  "requestFramePermissions": []
+}
