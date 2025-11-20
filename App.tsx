@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { GameState, GameStatus, CaptionCard, JudgeResult, MemeImage } from './types';
+import { GameState, GameStatus, CaptionCard, MemeImage } from './types';
 import { MEME_IMAGES } from './constants';
 import { generateUserHand, generateAiMove, judgeRound } from './services/geminiService';
 import Card from './components/Card';
