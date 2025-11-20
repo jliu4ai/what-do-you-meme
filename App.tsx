@@ -391,7 +391,8 @@ const App: React.FC = () => {
       <AuthModal 
         isOpen={showAuth} 
         onClose={() => setShowAuth(false)} 
-        onLogin={setCurrentUser} 
+        onLogin={setCurrentUser}
+        joiningRoomCode={pendingRoomCode}
       />
       
       {currentUser && (

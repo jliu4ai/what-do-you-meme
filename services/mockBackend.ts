@@ -127,9 +127,16 @@ export const roomService = {
     if (!CURRENT_USER) throw new Error("Not logged in");
 
     const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    return roomService.createRoomWithCode(roomId, themeId);
+  },
+
+  // NEW: Create a room with a specific code (useful for Invite Link fallbacks)
+  createRoomWithCode: async (code: string, themeId: string): Promise<Room> => {
+    if (!CURRENT_USER) throw new Error("Not logged in");
+    
     const newRoom: Room = {
-      id: roomId,
-      code: roomId,
+      id: code,
+      code: code,
       hostId: CURRENT_USER.id,
       players: [{
         id: CURRENT_USER.id,
@@ -148,7 +155,7 @@ export const roomService = {
       roundCaptions: []
     };
 
-    ROOMS[roomId] = newRoom;
+    ROOMS[code] = newRoom;
     saveData(); // Save to LS
     return newRoom;
   },

@@ -4,7 +4,7 @@ import { User, Room } from '../types';
 import { roomService } from '../services/mockBackend';
 import Button from './Button';
 import Spinner from './Spinner';
-import { Crown, Share2, CheckCircle2 } from 'lucide-react';
+import { Crown, Share2, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -19,11 +19,11 @@ const Lobby: React.FC<Props> = ({ user, onGameStart, onBack, initialRoomCode }) 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showCreateOption, setShowCreateOption] = useState(false);
 
   // Auto-join if code provided via props or prop changes
   useEffect(() => {
     if (initialRoomCode && !room) {
-        // Small delay to ensure UI renders before action
         setJoinCode(initialRoomCode);
         joinRoom(initialRoomCode);
     }
@@ -51,8 +51,23 @@ const Lobby: React.FC<Props> = ({ user, onGameStart, onBack, initialRoomCode }) 
     try {
         const newRoom = await roomService.createRoom('starter'); // Default theme
         setRoom(newRoom);
+        setShowCreateOption(false);
     } catch (e) {
         setError('Failed to create room');
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const createSpecificRoom = async (code: string) => {
+    setLoading(true);
+    try {
+        const newRoom = await roomService.createRoomWithCode(code, 'starter');
+        setRoom(newRoom);
+        setShowCreateOption(false);
+        setError('');
+    } catch (e) {
+        setError('Failed to create this specific room');
     } finally {
         setLoading(false);
     }
@@ -62,12 +77,16 @@ const Lobby: React.FC<Props> = ({ user, onGameStart, onBack, initialRoomCode }) 
     if (!codeToJoin) return;
     setLoading(true);
     setError('');
+    setShowCreateOption(false);
+
     try {
         const existingRoom = await roomService.joinRoom(codeToJoin.toUpperCase());
         if (existingRoom) {
             setRoom(existingRoom);
         } else {
-            setError('Room not found');
+            setError(`Room ${codeToJoin.toUpperCase()} not found.`);
+            // If they used a link/code, offer to create it since it's a mock backend
+            setShowCreateOption(true); 
         }
     } catch (e) {
         setError('Failed to join room');
@@ -84,7 +103,7 @@ const Lobby: React.FC<Props> = ({ user, onGameStart, onBack, initialRoomCode }) 
 
   const copyInviteLink = () => {
       if (!room) return;
-      // Generates link like: https://myapp.vercel.app/?room=ABCD
+      // Ensure clean URL generation
       const url = `${window.location.origin}${window.location.pathname}?room=${room.code}`;
       navigator.clipboard.writeText(url);
       setCopied(true);
@@ -95,7 +114,7 @@ const Lobby: React.FC<Props> = ({ user, onGameStart, onBack, initialRoomCode }) 
       // Waiting Room View
       return (
         <div className="max-w-2xl mx-auto w-full py-12 px-4">
-             <div className="bg-gray-900 border border-gray-800 rounded-3xl p-8 text-center">
+             <div className="bg-gray-900 border border-gray-800 rounded-3xl p-8 text-center animate-in fade-in slide-in-from-bottom-4">
                 <div className="mb-8 relative">
                     <p className="text-gray-500 uppercase text-sm font-bold tracking-widest mb-2">Room Code</p>
                     <div className="text-5xl font-mono font-black text-purple-400 tracking-widest flex items-center justify-center gap-4 mb-4">
@@ -106,7 +125,7 @@ const Lobby: React.FC<Props> = ({ user, onGameStart, onBack, initialRoomCode }) 
                         variant="secondary" 
                         size="sm" 
                         onClick={copyInviteLink}
-                        className="mx-auto bg-gray-800 hover:bg-gray-700"
+                        className="mx-auto bg-gray-800 hover:bg-gray-700 border-gray-600"
                     >
                         {copied ? (
                             <>Copied! <CheckCircle2 className="w-4 h-4 text-green-400" /></>
@@ -181,14 +200,40 @@ const Lobby: React.FC<Props> = ({ user, onGameStart, onBack, initialRoomCode }) 
                     <input 
                         type="text" 
                         value={joinCode}
-                        onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                        onChange={(e) => {
+                            setJoinCode(e.target.value.toUpperCase());
+                            setShowCreateOption(false);
+                            setError('');
+                        }}
                         placeholder="CODE"
                         className="bg-black border border-gray-700 text-white font-mono text-center text-xl rounded-xl flex-1 p-3 focus:border-purple-500 focus:outline-none"
                         maxLength={6}
                     />
                     <Button onClick={() => joinRoom()} disabled={joinCode.length < 3} isLoading={loading}>Join</Button>
                 </div>
-                {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
+                
+                {error && (
+                    <div className="mt-4 bg-red-900/20 border border-red-900/50 p-3 rounded-xl text-center">
+                        <div className="flex items-center justify-center gap-2 text-red-400 text-sm mb-2">
+                             <AlertCircle size={16} /> {error}
+                        </div>
+                        {showCreateOption && (
+                            <div className="animate-in fade-in slide-in-from-top-2">
+                                <p className="text-xs text-gray-400 mb-2">
+                                    (Since this is a demo, rooms aren't shared across devices)
+                                </p>
+                                <Button 
+                                    size="sm" 
+                                    variant="secondary" 
+                                    onClick={() => createSpecificRoom(joinCode)}
+                                    className="w-full"
+                                >
+                                    Create Room {joinCode}
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     </div>
