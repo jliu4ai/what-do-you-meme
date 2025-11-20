@@ -1,0 +1,168 @@
+
+import React, { useState, useEffect } from 'react';
+import { User, Room } from '../types';
+import { roomService } from '../services/mockBackend';
+import Button from './Button';
+import Spinner from './Spinner';
+import { Users, Play, Copy, Crown } from 'lucide-react';
+
+interface Props {
+  user: User;
+  onGameStart: (room: Room) => void;
+  onBack: () => void;
+}
+
+const Lobby: React.FC<Props> = ({ user, onGameStart, onBack }) => {
+  const [room, setRoom] = useState<Room | null>(null);
+  const [joinCode, setJoinCode] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Polling for room updates
+  useEffect(() => {
+    if (!room) return;
+    
+    const interval = setInterval(async () => {
+        const updated = await roomService.getRoom(room.id);
+        if (updated) {
+            setRoom(updated);
+            if (updated.status === 'PLAYING') {
+                onGameStart(updated);
+            }
+        }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [room, onGameStart]);
+
+  const createRoom = async () => {
+    setLoading(true);
+    try {
+        const newRoom = await roomService.createRoom('starter'); // Default theme
+        setRoom(newRoom);
+    } catch (e) {
+        setError('Failed to create room');
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const joinRoom = async () => {
+    if (!joinCode) return;
+    setLoading(true);
+    setError('');
+    try {
+        const existingRoom = await roomService.joinRoom(joinCode.toUpperCase());
+        if (existingRoom) {
+            setRoom(existingRoom);
+        } else {
+            setError('Room not found');
+        }
+    } catch (e) {
+        setError('Failed to join room');
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleStartGame = async () => {
+      if (room) {
+          await roomService.startGame(room.id);
+      }
+  };
+
+  if (room) {
+      // Waiting Room View
+      return (
+        <div className="max-w-2xl mx-auto w-full py-12 px-4">
+             <div className="bg-gray-900 border border-gray-800 rounded-3xl p-8 text-center">
+                <div className="mb-8">
+                    <p className="text-gray-500 uppercase text-sm font-bold tracking-widest mb-2">Room Code</p>
+                    <div className="text-5xl font-mono font-black text-purple-400 tracking-widest flex items-center justify-center gap-4">
+                        {room.code}
+                        <button onClick={() => navigator.clipboard.writeText(room.code)} className="text-gray-600 hover:text-white text-xl">
+                            <Copy />
+                        </button>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-12">
+                    {room.players.map(p => (
+                        <div key={p.id} className="flex flex-col items-center p-4 bg-gray-800 rounded-xl animate-in fade-in zoom-in">
+                            <img src={p.avatar} className="w-16 h-16 rounded-full bg-gray-700 mb-2" alt={p.name} />
+                            <span className="font-bold flex items-center gap-1">
+                                {p.name} {p.isHost && <Crown size={14} className="text-yellow-500" />}
+                            </span>
+                        </div>
+                    ))}
+                    {Array.from({ length: Math.max(0, 4 - room.players.length) }).map((_, i) => (
+                        <div key={i} className="flex flex-col items-center p-4 border border-dashed border-gray-700 rounded-xl opacity-30">
+                            <div className="w-16 h-16 rounded-full bg-gray-800 mb-2"></div>
+                            <span className="text-sm">Waiting...</span>
+                        </div>
+                    ))}
+                </div>
+
+                {room.hostId === user.id ? (
+                    <Button 
+                        onClick={handleStartGame} 
+                        className="w-full py-4 text-xl" 
+                        disabled={room.players.length < 2}
+                    >
+                        {room.players.length < 2 ? 'Waiting for players...' : 'Start Game'}
+                    </Button>
+                ) : (
+                    <div className="flex items-center justify-center gap-2 text-gray-400 animate-pulse">
+                        <Spinner className="w-5 h-5" /> Waiting for host to start...
+                    </div>
+                )}
+             </div>
+        </div>
+      );
+  }
+
+  // Selection View
+  return (
+    <div className="max-w-md mx-auto w-full py-12 px-4">
+        <div className="flex items-center justify-center mb-8">
+             <button onClick={onBack} className="text-gray-500 hover:text-white mr-auto">Back</button>
+             <h2 className="text-2xl font-bold mr-auto pr-8">Multiplayer</h2>
+        </div>
+
+        <div className="space-y-6">
+            <div className="bg-gradient-to-br from-purple-900/50 to-blue-900/50 p-6 rounded-2xl border border-purple-500/30">
+                <h3 className="text-lg font-bold mb-4">Create Room</h3>
+                <p className="text-sm text-gray-400 mb-4">Host a game and invite friends.</p>
+                <Button onClick={createRoom} isLoading={loading} className="w-full">Host Game</Button>
+            </div>
+
+            <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-800"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-[#111827] text-gray-500">Or join existing</span>
+                </div>
+            </div>
+
+            <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800">
+                <h3 className="text-lg font-bold mb-4">Join Room</h3>
+                <div className="flex gap-2">
+                    <input 
+                        type="text" 
+                        value={joinCode}
+                        onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                        placeholder="CODE"
+                        className="bg-black border border-gray-700 text-white font-mono text-center text-xl rounded-xl flex-1 p-3 focus:border-purple-500 focus:outline-none"
+                        maxLength={6}
+                    />
+                    <Button onClick={joinRoom} disabled={joinCode.length < 3} isLoading={loading}>Join</Button>
+                </div>
+                {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
+            </div>
+        </div>
+    </div>
+  );
+};
+
+export default Lobby;

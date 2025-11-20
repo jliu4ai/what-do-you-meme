@@ -1,14 +1,28 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { GameState, GameStatus, CaptionCard, MemeImage } from './types';
+import { GameState, GameStatus, CaptionCard, MemeImage, User, Room } from './types';
 import { MEME_IMAGES } from './constants';
 import { generateUserHand, generateAiMove, judgeRound } from './services/geminiService';
+import { authService, roomService } from './services/mockBackend';
 import Card from './components/Card';
 import Button from './components/Button';
 import Spinner from './components/Spinner';
-import { Trophy, BrainCircuit, RotateCcw, Sparkles, Share2, Link as LinkIcon } from 'lucide-react';
+import AuthModal from './components/AuthModal';
+import ShopModal from './components/ShopModal';
+import Lobby from './components/Lobby';
+import { Trophy, BrainCircuit, RotateCcw, Sparkles, Share2, Link as LinkIcon, ShoppingBag, User as UserIcon, Users } from 'lucide-react';
+
+type ViewState = 'HOME' | 'GAME_SOLO' | 'GAME_MULTI' | 'LOBBY';
 
 const App: React.FC = () => {
-  // --- State ---
+  // --- App State ---
+  const [view, setView] = useState<ViewState>('HOME');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [showAuth, setShowAuth] = useState(false);
+  const [showShop, setShowShop] = useState(false);
+  const [multiplayerRoom, setMultiplayerRoom] = useState<Room | null>(null);
+
+  // --- Game State (Solo) ---
   const [gameState, setGameState] = useState<GameState>({
     status: GameStatus.IDLE,
     currentImage: null,
@@ -27,14 +41,18 @@ const App: React.FC = () => {
 
   // --- Initialization ---
   useEffect(() => {
-    // Check for challenge link (e.g., ?img=15)
+    // 1. Check Auth
+    const user = authService.getCurrentUser();
+    if (user) setCurrentUser(user);
+
+    // 2. Check URL Challenge
     const params = new URLSearchParams(window.location.search);
     const imgId = params.get('img');
     if (imgId) {
       const targetImage = MEME_IMAGES.find(img => img.id === imgId);
       if (targetImage) {
         setChallengeId(imgId);
-        // Auto start if challenge present
+        setView('GAME_SOLO');
         startGameWithImage(targetImage);
       }
     }
@@ -73,16 +91,20 @@ const App: React.FC = () => {
   };
 
   const startNewRound = useCallback(async () => {
-    // Clear challenge ID if we are starting a random new round
     if (challengeId) {
         setChallengeId(null);
         window.history.pushState({}, '', window.location.pathname);
     }
 
-    // Pick a random image
-    const randomImage = MEME_IMAGES[Math.floor(Math.random() * MEME_IMAGES.length)];
+    // Pick random image based on unlocked themes
+    let pool = MEME_IMAGES;
+    if (currentUser) {
+        pool = MEME_IMAGES.filter(img => !img.themeId || currentUser.unlockedThemes.includes(img.themeId));
+    }
+    
+    const randomImage = pool[Math.floor(Math.random() * pool.length)];
     startGameWithImage(randomImage);
-  }, [challengeId]);
+  }, [challengeId, currentUser]);
 
   const handleSelectCard = (card: CaptionCard) => {
     if (gameState.status !== GameStatus.PLAYING) return;
@@ -92,10 +114,8 @@ const App: React.FC = () => {
   const confirmSelection = async () => {
     if (!gameState.selectedCard || !gameState.currentImage) return;
 
-    // Move to AI Turn
     setGameState(prev => ({ ...prev, status: GameStatus.CALCULATING_AI }));
 
-    // Generate AI Card
     const aiText = await generateAiMove(gameState.currentImage.url);
     const aiCard: CaptionCard = {
       id: `ai-${Date.now()}`,
@@ -105,7 +125,6 @@ const App: React.FC = () => {
 
     setGameState(prev => ({ ...prev, aiCard, status: GameStatus.JUDGING }));
 
-    // Judge the round
     const result = await judgeRound(gameState.currentImage.url, gameState.selectedCard.text, aiCard.text);
     
     setGameState(prev => ({
@@ -119,18 +138,23 @@ const App: React.FC = () => {
 
   const copyChallengeLink = () => {
     if (!gameState.currentImage) return;
-    
     const url = `${window.location.origin}${window.location.pathname}?img=${gameState.currentImage.id}`;
     navigator.clipboard.writeText(url);
     setShowCopied(true);
     setTimeout(() => setShowCopied(false), 2000);
   };
 
+  // --- MultiPlayer Handlers ---
+  const handleMultiplayerStart = (room: Room) => {
+      setMultiplayerRoom(room);
+      setView('GAME_MULTI');
+  };
+
   // --- Render Helpers ---
 
   const renderHeader = () => (
     <header className="flex items-center justify-between px-6 py-4 bg-gray-900/50 border-b border-gray-800 sticky top-0 z-50 backdrop-blur-md">
-      <div className="flex items-center gap-2 cursor-pointer" onClick={() => window.location.reload()}>
+      <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('HOME')}>
         <div className="bg-gradient-to-br from-pink-500 to-purple-600 p-2 rounded-lg">
           <Sparkles className="w-6 h-6 text-white" />
         </div>
@@ -139,43 +163,63 @@ const App: React.FC = () => {
         </h1>
       </div>
       
-      <div className="flex items-center gap-6 text-sm font-bold">
-        <div className="flex flex-col items-end">
-          <span className="text-gray-400 text-xs">HUMAN</span>
-          <span className="text-2xl text-white">{gameState.totalUserScore}</span>
-        </div>
-        <div className="h-8 w-px bg-gray-700"></div>
-        <div className="flex flex-col items-start">
-          <span className="text-purple-400 text-xs">GEMINI AI</span>
-          <span className="text-2xl text-white">{gameState.totalAiScore}</span>
-        </div>
+      <div className="flex items-center gap-4">
+        {currentUser ? (
+             <div className="flex items-center gap-3 bg-gray-800 py-1 px-2 rounded-full border border-gray-700">
+                 <img src={currentUser.avatar} className="w-8 h-8 rounded-full" alt="avatar" />
+                 <div className="hidden md:block text-sm pr-2">
+                     <p className="font-bold leading-none">{currentUser.name}</p>
+                     <p className="text-yellow-500 text-xs font-mono">🪙 {currentUser.coins}</p>
+                 </div>
+             </div>
+        ) : (
+            <Button size="sm" variant="ghost" onClick={() => setShowAuth(true)}>
+                Login
+            </Button>
+        )}
+
+        {currentUser && (
+             <Button size="sm" variant="gold" onClick={() => setShowShop(true)}>
+                <ShoppingBag size={18} />
+             </Button>
+        )}
       </div>
     </header>
   );
 
-  const renderHeroArea = () => {
-    if (gameState.status === GameStatus.IDLE) {
-      return (
-        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 animate-in fade-in duration-700">
-          <h2 className="text-4xl md:text-6xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600">
-            Meme Battle Arena
-          </h2>
-          <p className="text-gray-400 max-w-lg mb-8 text-lg">
-            Compete against Gemini AI. 
-            <br />
-            You pick the caption. The AI picks a caption. 
-            <br />
-            The AI judges who is funnier.
-          </p>
-          <Button onClick={startNewRound} className="text-xl px-12 py-4 shadow-purple-500/50 hover:shadow-purple-500/80">
-            Start Game
-          </Button>
-        </div>
-      );
-    }
+  const renderHome = () => (
+    <div className="flex flex-col items-center justify-center min-h-[80vh] text-center px-4 animate-in fade-in duration-700">
+        <h2 className="text-5xl md:text-7xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600 drop-shadow-lg">
+        Meme Battle Arena
+        </h2>
+        <p className="text-gray-400 max-w-lg mb-12 text-lg">
+        The party game where you battle AI or Friends to create the funniest caption.
+        </p>
+        
+        <div className="flex flex-col md:flex-row gap-6 w-full max-w-xl">
+            <div className="flex-1 bg-gray-800/50 p-6 rounded-2xl border border-gray-700 hover:border-purple-500 transition-colors cursor-pointer group" onClick={() => { setView('GAME_SOLO'); startNewRound(); }}>
+                <div className="bg-purple-900/30 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                    <BrainCircuit className="w-8 h-8 text-purple-400" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">Solo vs AI</h3>
+                <p className="text-sm text-gray-500">Challenge Gemini 2.5 Flash directly.</p>
+            </div>
 
+            <div className="flex-1 bg-gray-800/50 p-6 rounded-2xl border border-gray-700 hover:border-pink-500 transition-colors cursor-pointer group" 
+                 onClick={() => currentUser ? setView('LOBBY') : setShowAuth(true)}>
+                <div className="bg-pink-900/30 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                    <Users className="w-8 h-8 text-pink-400" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">Multiplayer</h3>
+                <p className="text-sm text-gray-500">Create a room and battle friends.</p>
+            </div>
+        </div>
+    </div>
+  );
+
+  const renderGameArea = () => {
     return (
-      <div className="flex flex-col items-center gap-6 my-6 w-full max-w-3xl mx-auto px-4">
+      <div className="flex flex-col items-center gap-6 my-6 w-full max-w-3xl mx-auto px-4 pb-32">
         {/* Challenge Banner */}
         {challengeId && (
             <div className="bg-yellow-500/10 text-yellow-400 border border-yellow-500/50 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2">
@@ -257,43 +301,36 @@ const App: React.FC = () => {
              </div>
           </div>
         )}
-      </div>
-    );
-  };
 
-  const renderPlayerHand = () => {
-    if (gameState.status !== GameStatus.PLAYING && gameState.status !== GameStatus.CALCULATING_AI && gameState.status !== GameStatus.JUDGING) {
-        return null;
-    }
-
-    return (
-      <div className="w-full max-w-6xl mx-auto px-4 pb-12">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-            Your Cards <span className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-500">Pick the funniest</span>
-          </h3>
-          {gameState.status === GameStatus.PLAYING && (
-             <Button 
-               disabled={!gameState.selectedCard} 
-               onClick={confirmSelection}
-               className="shadow-xl shadow-purple-500/20 px-8"
-             >
-               Play Card
-             </Button>
-          )}
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {gameState.userHand.map((card) => (
-            <Card
-              key={card.id}
-              card={card}
-              isSelected={gameState.selectedCard?.id === card.id}
-              onClick={() => handleSelectCard(card)}
-              disabled={gameState.status !== GameStatus.PLAYING}
-            />
-          ))}
-        </div>
+        {/* Player Hand */}
+        {(gameState.status === GameStatus.PLAYING || gameState.status === GameStatus.CALCULATING_AI || gameState.status === GameStatus.JUDGING) && (
+            <div className="w-full">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                        Your Cards <span className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-500">Pick the funniest</span>
+                    </h3>
+                    <Button 
+                        disabled={!gameState.selectedCard || gameState.status !== GameStatus.PLAYING} 
+                        onClick={confirmSelection}
+                        className="shadow-xl shadow-purple-500/20 px-8"
+                    >
+                        Play Card
+                    </Button>
+                </div>
+                
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    {gameState.userHand.map((card) => (
+                        <Card
+                        key={card.id}
+                        card={card}
+                        isSelected={gameState.selectedCard?.id === card.id}
+                        onClick={() => handleSelectCard(card)}
+                        disabled={gameState.status !== GameStatus.PLAYING}
+                        />
+                    ))}
+                </div>
+            </div>
+        )}
       </div>
     );
   };
@@ -303,14 +340,37 @@ const App: React.FC = () => {
       {renderHeader()}
       
       <main className="flex-1 w-full flex flex-col">
-        {renderHeroArea()}
-        {renderPlayerHand()}
+        {view === 'HOME' && renderHome()}
+        {view === 'GAME_SOLO' && renderGameArea()}
+        {view === 'LOBBY' && currentUser && (
+            <Lobby user={currentUser} onGameStart={handleMultiplayerStart} onBack={() => setView('HOME')} />
+        )}
+        {view === 'GAME_MULTI' && multiplayerRoom && (
+            <div className="flex items-center justify-center h-[80vh] flex-col text-center p-8">
+                <h2 className="text-3xl font-bold mb-4">Multiplayer Room: {multiplayerRoom.code}</h2>
+                <p className="text-gray-400">Multiplayer gameplay is simulated in this demo.</p>
+                <Button onClick={() => setView('LOBBY')} className="mt-8">Back to Lobby</Button>
+            </div>
+        )}
       </main>
 
-      {/* Footer / Copyright */}
+      <AuthModal 
+        isOpen={showAuth} 
+        onClose={() => setShowAuth(false)} 
+        onLogin={setCurrentUser} 
+      />
+      
+      {currentUser && (
+        <ShopModal 
+            isOpen={showShop}
+            onClose={() => setShowShop(false)}
+            user={currentUser}
+            onPurchase={() => setCurrentUser({ ...currentUser })} // Force re-render
+        />
+      )}
+
       <footer className="py-8 text-center text-gray-600 text-xs border-t border-gray-800/50 mt-auto">
-        <p>Powered by Google Gemini 2.5 Flash. Images sourced from Unsplash.</p>
-        <p className="mt-1 opacity-50">Not affiliated with "What Do You Meme?"™ LLC.</p>
+        <p>Powered by Google Gemini 2.5 Flash. Mock Payments & Auth enabled.</p>
       </footer>
     </div>
   );
