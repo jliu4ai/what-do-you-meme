@@ -3,14 +3,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { GameState, GameStatus, CaptionCard, MemeImage, User, Room } from './types';
 import { MEME_IMAGES } from './constants';
 import { generateUserHand, generateAiMove, judgeRound } from './services/geminiService';
-import { authService, roomService } from './services/mockBackend';
+import { authService } from './services/mockBackend';
 import Card from './components/Card';
 import Button from './components/Button';
 import Spinner from './components/Spinner';
 import AuthModal from './components/AuthModal';
 import ShopModal from './components/ShopModal';
 import Lobby from './components/Lobby';
-import { Trophy, BrainCircuit, RotateCcw, Sparkles, Share2, Link as LinkIcon, ShoppingBag, User as UserIcon, Users } from 'lucide-react';
+import { Trophy, BrainCircuit, RotateCcw, Sparkles, Share2, Link as LinkIcon, ShoppingBag, Users } from 'lucide-react';
 
 type ViewState = 'HOME' | 'GAME_SOLO' | 'GAME_MULTI' | 'LOBBY';
 

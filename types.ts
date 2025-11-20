@@ -29,7 +29,7 @@ export interface JudgeResult {
   funniestCaption: string;
 }
 
-// --- NEW TYPES ---
+// --- NEW FEATURES TYPES ---
 
 export interface User {
   id: string;
