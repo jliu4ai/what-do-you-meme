@@ -4,7 +4,7 @@ import { User, Room } from '../types';
 import { roomService } from '../services/mockBackend';
 import Button from './Button';
 import Spinner from './Spinner';
-import { Copy, Crown, Share2, CheckCircle2 } from 'lucide-react';
+import { Crown, Share2, CheckCircle2 } from 'lucide-react';
 
 interface Props {
   user: User;
