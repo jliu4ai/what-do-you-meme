@@ -20,9 +20,11 @@ const Lobby: React.FC<Props> = ({ user, onGameStart, onBack, initialRoomCode }) 
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Auto-join if code provided via props
+  // Auto-join if code provided via props or prop changes
   useEffect(() => {
     if (initialRoomCode && !room) {
+        // Small delay to ensure UI renders before action
+        setJoinCode(initialRoomCode);
         joinRoom(initialRoomCode);
     }
   }, [initialRoomCode]);
@@ -82,7 +84,8 @@ const Lobby: React.FC<Props> = ({ user, onGameStart, onBack, initialRoomCode }) 
 
   const copyInviteLink = () => {
       if (!room) return;
-      const url = `${window.location.origin}?room=${room.code}`;
+      // Generates link like: https://myapp.vercel.app/?room=ABCD
+      const url = `${window.location.origin}${window.location.pathname}?room=${room.code}`;
       navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);

@@ -15,15 +15,34 @@ const INITIAL_USER: User = {
   unlockedThemes: ['starter']
 };
 
-// Initialize from storage on load
-try {
-  const saved = localStorage.getItem('meme_user');
-  if (saved) {
-    CURRENT_USER = JSON.parse(saved);
+// --- PERSISTENCE HELPERS ---
+const loadData = () => {
+  try {
+    // Load User
+    const savedUser = localStorage.getItem('meme_user');
+    if (savedUser) {
+      CURRENT_USER = JSON.parse(savedUser);
+    }
+    // Load Rooms (Critical for Invite Links to work in demo)
+    const savedRooms = localStorage.getItem('meme_rooms');
+    if (savedRooms) {
+      ROOMS = JSON.parse(savedRooms);
+    }
+  } catch (e) {
+    console.error("Failed to restore data", e);
   }
-} catch (e) {
-  console.error("Failed to restore user session", e);
-}
+};
+
+const saveData = () => {
+  if (CURRENT_USER) {
+    localStorage.setItem('meme_user', JSON.stringify(CURRENT_USER));
+  }
+  // Persist rooms so other tabs can see them
+  localStorage.setItem('meme_rooms', JSON.stringify(ROOMS));
+};
+
+// Initialize
+loadData();
 
 // Helper to decode Google JWT (Client-side only for demo)
 const parseJwt = (token: string) => {
@@ -55,7 +74,7 @@ export const authService = {
             coins: CURRENT_USER?.coins || 100, // Preserve coins if re-login
             unlockedThemes: CURRENT_USER?.unlockedThemes || ['starter']
         };
-        localStorage.setItem('meme_user', JSON.stringify(CURRENT_USER));
+        saveData();
         return CURRENT_USER;
     }
     throw new Error("Invalid Google Token");
@@ -66,17 +85,16 @@ export const authService = {
     await new Promise(r => setTimeout(r, 800)); // Simulate network
     
     if (!CURRENT_USER) {
-       // Check localStorage logic handled in init, but if still null:
        CURRENT_USER = { ...INITIAL_USER };
-       localStorage.setItem('meme_user', JSON.stringify(CURRENT_USER));
     }
+    saveData();
     return CURRENT_USER!;
   },
 
   logout: async () => {
     CURRENT_USER = null;
     localStorage.removeItem('meme_user');
-    // Optional: Revoke google token if needed
+    // Note: We don't clear rooms on logout so game persists
   },
 
   getCurrentUser: () => CURRENT_USER
@@ -95,8 +113,7 @@ export const shopService = {
     // Simulate successful payment logic
     if (!CURRENT_USER.unlockedThemes.includes(themeId)) {
       CURRENT_USER.unlockedThemes.push(themeId);
-      // Deduct fake coins or just unlock
-      localStorage.setItem('meme_user', JSON.stringify(CURRENT_USER));
+      saveData();
       return true;
     }
     return true;
@@ -132,10 +149,12 @@ export const roomService = {
     };
 
     ROOMS[roomId] = newRoom;
+    saveData(); // Save to LS
     return newRoom;
   },
 
   joinRoom: async (code: string): Promise<Room | null> => {
+    loadData(); // Refresh data from LS in case another tab updated it
     await new Promise(r => setTimeout(r, 600));
     if (!CURRENT_USER) throw new Error("Not logged in");
 
@@ -153,6 +172,7 @@ export const roomService = {
         isReady: false,
         currentCard: null
       });
+      saveData(); // Update LS
     }
     
     return room;
@@ -160,21 +180,22 @@ export const roomService = {
 
   // POLLING FUNCTION
   getRoom: async (roomId: string): Promise<Room | null> => {
-    // In a real app, this would be a socket subscription
-    // Here we return the memory state
+    loadData(); // Always fetch fresh data from LS
     return ROOMS[roomId] || null;
   },
 
   startGame: async (roomId: string) => {
+    loadData();
     const room = ROOMS[roomId];
     if (room) {
       room.status = 'PLAYING';
-      // Pick first image
       room.currentImage = getRandomImage(room.themeId);
+      saveData();
     }
   },
 
   submitCard: async (roomId: string, playerId: string, text: string) => {
+    loadData();
     const room = ROOMS[roomId];
     if (!room) return;
     
@@ -189,10 +210,11 @@ export const roomService = {
     if (allSubmitted) {
       room.status = 'VOTING';
     }
+    saveData();
   },
 
   vote: async (roomId: string, cardId: string) => {
-    // Simplified: just tally scores immediately and next round
+    loadData();
     const room = ROOMS[roomId];
     if (!room) return;
 
@@ -213,6 +235,7 @@ export const roomService = {
       room.roundCaptions = [];
       room.players.forEach(p => p.currentCard = null);
     }
+    saveData();
   }
 };
 

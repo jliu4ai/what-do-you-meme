@@ -54,13 +54,13 @@ const App: React.FC = () => {
     // Check for Invite Room Code
     const roomCode = params.get('room');
     if (roomCode) {
+        console.log("Detected room code:", roomCode);
         setPendingRoomCode(roomCode);
         // If user is logged in, go straight to lobby
         if (user) {
             setView('LOBBY');
         } else {
-            // If not logged in, we will show auth modal on click or let them login first
-            // For better UX, let's prompt login
+            // If not logged in, show auth modal immediately so they can join
             setShowAuth(true);
         }
     }
@@ -79,10 +79,11 @@ const App: React.FC = () => {
 
   // Watch for login to redirect to pending room
   useEffect(() => {
-      if (currentUser && pendingRoomCode && view === 'HOME') {
+      if (currentUser && pendingRoomCode) {
+          console.log("User logged in with pending room, going to Lobby...");
           setView('LOBBY');
       }
-  }, [currentUser, pendingRoomCode, view]);
+  }, [currentUser, pendingRoomCode]);
 
   // --- Actions ---
 
