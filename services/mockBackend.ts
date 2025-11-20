@@ -1,5 +1,5 @@
 
-import { User, Room, Player, ThemePack, MemeImage } from "../types";
+import { User, Room, MemeImage } from "../types";
 import { MEME_IMAGES, THEME_PACKS } from "../constants";
 
 // --- SIMULATED DATABASE ---
@@ -15,18 +15,30 @@ const INITIAL_USER: User = {
   unlockedThemes: ['starter']
 };
 
+// Initialize from storage on load
+try {
+  const saved = localStorage.getItem('meme_user');
+  if (saved) {
+    CURRENT_USER = JSON.parse(saved);
+  }
+} catch (e) {
+  console.error("Failed to restore user session", e);
+}
+
 // --- AUTH SERVICE ---
 export const authService = {
   login: async (): Promise<User> => {
     await new Promise(r => setTimeout(r, 800)); // Simulate network
     
-    // Check localStorage for persistence
-    const saved = localStorage.getItem('meme_user');
-    if (saved) {
-      CURRENT_USER = JSON.parse(saved);
-    } else {
-      CURRENT_USER = { ...INITIAL_USER };
-      localStorage.setItem('meme_user', JSON.stringify(CURRENT_USER));
+    // Check localStorage for persistence (or re-save if missing)
+    if (!CURRENT_USER) {
+       const saved = localStorage.getItem('meme_user');
+       if (saved) {
+         CURRENT_USER = JSON.parse(saved);
+       } else {
+         CURRENT_USER = { ...INITIAL_USER };
+         localStorage.setItem('meme_user', JSON.stringify(CURRENT_USER));
+       }
     }
     return CURRENT_USER!;
   },
